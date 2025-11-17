@@ -17,5 +17,5 @@ def root(data=''):
     return "com"
 
 if __name__ == "__main__":
-    app.run(host="::", port=20000)
+    app.run(host="::", port=8000)
 

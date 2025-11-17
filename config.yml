@@ -1,10 +1,16 @@
-port: 80
+port: 8787
 usessl: false
 cert: ""
 key: ""
 
 route:
   default:
+    mode: proxy
+
+  163.21.158.120:5001:
+    mode: proxy
+    ssl: true
+    replace: true
 
 #  <HOSTNAME>:
 #    mode: return

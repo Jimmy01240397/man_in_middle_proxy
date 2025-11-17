@@ -5,8 +5,9 @@ import io
 import dpkt.http
 import yaml
 import re
+import gzip
 
-buffer_size = 65535
+buffer_size = 1
 
 if len(sys.argv) <= 1:
     print(f"usage: {sys.argv[0]} <config file>")
@@ -37,9 +38,11 @@ def parse_ip_port(address):
 
 def readhttp(conn, packer):
     conn.settimeout(1)
-    data = conn.recv(buffer_size)
-    if len(data) == 0:
-        raise Exception()
+    data = b''
+    while b'\r\n\r\n' not in data:
+        data += conn.recv(buffer_size)
+        if len(data) == 0:
+            raise Exception()
     buf = io.BytesIO(data)
     buf.readline()
     header = dpkt.http.parse_headers(buf)
@@ -98,13 +101,14 @@ while True:
                     req = dpkt.http.Request()
                     data = readhttp(conn, req)
                     rule = {}
-                    if req.headers['host'] in route:
-                        rule = route[req.headers['host']]
+                    oldhost = req.headers['host']
+                    if oldhost in route:
+                        rule = route[oldhost]
                     elif 'default' in route:
                         rule = route['default']
                     if rule == None:
                         rule = {}
-                    usehost = req.headers['host']
+                    usehost = oldhost
                     if 'host' in rule:
                         usehost = rule['host']
                         if 'port' in rule:
@@ -135,6 +139,24 @@ while True:
                         sock.send(bytes(req))
                         res = dpkt.http.Response()
                         data = readhttp(sock, res)
+                        if 'replace' in rule and rule['replace']:
+                            body = res.body
+                            if 'content-encoding' in res.headers and res.headers['content-encoding'] == 'gzip':
+                                body = gzip.decompress(res.body)
+                            body = body.replace(f'{"https" if "ssl" in rule and rule["ssl"] else "http"}://{usehost}'.encode(), f'{"https" if usessl else "http"}://{oldhost}'.encode())
+                            body = body.replace(f'{"https" if "ssl" in rule and rule["ssl"] else "http"}:\\/\\/{usehost}'.encode(), f'{"https" if usessl else "http"}://{oldhost}'.encode())
+                            for a in res.headers:
+                                if type(res.headers[a]) == list:
+                                    for b in range(len(res.headers[a])):
+                                        res.headers[a][b] = res.headers[a][b].replace(f'{"https" if "ssl" in rule and rule["ssl"] else "http"}://{usehost}', f'{"https" if usessl else "http"}://{oldhost}')
+                                else:
+                                    res.headers[a] = res.headers[a].replace(f'{"https" if "ssl" in rule and rule["ssl"] else "http"}://{usehost}', f'{"https" if usessl else "http"}://{oldhost}')
+                            res.body = body
+                            if 'content-encoding' in res.headers and res.headers['content-encoding'] == 'gzip':
+                                res.body = gzip.compress(body)
+                            res.headers['content-length'] = len(res.body)
+                            data = bytes(res)
+
                     else:
                         usecontent = 'HI'
                         if 'content' in rule:

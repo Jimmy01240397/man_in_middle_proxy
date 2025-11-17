@@ -1,3 +1,6 @@
 #!/bin/bash
-. ./venv/bin/activate
-python . $@
+
+dirname="$(dirname $(realpath $0))"
+
+. $dirname/venv/bin/activate
+python $dirname $@
